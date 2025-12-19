@@ -37,17 +37,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// Import generated NOC data
-import nocDataRaw from "./noc-data.json"
-
-// Type assertion for the imported JSON
-const nocData = nocDataRaw as { title: string; code: string }[]
-
 interface JobTitle {
   id: string
   standardOccupation: string
   nocCode?: string
   internalTitle: string
+}
+
+interface NocOccupation {
+  title: string
+  code: string
 }
 
 export function JobTitlesManager() {
@@ -62,27 +61,35 @@ export function JobTitlesManager() {
   const [internalTitle, setInternalTitle] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
-  // Filtered list for performance (max 50 items visible at once)
-  const [filteredOccupations, setFilteredOccupations] = React.useState(nocData.slice(0, 50))
-  
+  // Filtered list from API
+  const [filteredOccupations, setFilteredOccupations] = React.useState<NocOccupation[]>([])
+  const [isLoading, setIsLoading] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
 
   React.useEffect(() => {
-    if (!searchQuery) {
-      setFilteredOccupations(nocData.slice(0, 50))
-      return
-    }
+    const fetchOccupations = async () => {
+      if (!searchQuery) {
+        setFilteredOccupations([])
+        return
+      }
 
-    const lowerQuery = searchQuery.toLowerCase()
-    const matches = []
-    // Efficiently find first 50 matches
-    for (let i = 0; i < nocData.length; i++) {
-      if (nocData[i].title.toLowerCase().includes(lowerQuery) || nocData[i].code.includes(lowerQuery)) {
-        matches.push(nocData[i])
-        if (matches.length >= 50) break
+      setIsLoading(true)
+      try {
+        const res = await fetch(`/api/occupations?q=${encodeURIComponent(searchQuery)}`)
+        if (res.ok) {
+          const data = await res.json()
+          setFilteredOccupations(data)
+        }
+      } catch (err) {
+        console.error("Failed to fetch occupations", err)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setFilteredOccupations(matches)
+
+    // Debounce the API call (wait 300ms after typing stops)
+    const timer = setTimeout(fetchOccupations, 300)
+    return () => clearTimeout(timer)
   }, [searchQuery])
 
   const resetForm = () => {
@@ -92,6 +99,7 @@ export function JobTitlesManager() {
     setError(null)
     setEditingJob(null)
     setSearchQuery("")
+    setFilteredOccupations([])
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -102,11 +110,7 @@ export function JobTitlesManager() {
   const handleEdit = (job: JobTitle) => {
     setEditingJob(job)
     setStandardOccupation(job.standardOccupation)
-    
-    // Find NOC code if missing (for legacy data)
-    const match = nocData.find(n => n.title === job.standardOccupation)
-    setSelectedNocCode(job.nocCode || match?.code || "")
-    
+    setSelectedNocCode(job.nocCode || "")
     setInternalTitle(job.internalTitle)
     setIsDialogOpen(true)
   }
@@ -272,7 +276,9 @@ export function JobTitlesManager() {
                       onValueChange={setSearchQuery}
                     />
                     <CommandList>
-                      <CommandEmpty>No occupation found.</CommandEmpty>
+                      <CommandEmpty>
+                        {isLoading ? "Loading..." : "No occupation found."}
+                      </CommandEmpty>
                       <CommandGroup>
                         {filteredOccupations.map((occupation) => (
                           <CommandItem
