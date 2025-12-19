@@ -12,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,20 +37,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// Data Source
-const nocOccupations = [
-  "Software engineers and designers",
-  "Software testers",
-  "Product managers",
-  "Makeup artists",
-  "Hairdressers and barbers",
-  "Payroll clerks",
-  "Human resources professionals",
-  "Marketing specialists",
-  "Customer service representatives",
-  "Computer network technicians",
-  "Web designers and developers"
-]
+// Import generated NOC data
+import nocData from "./noc-data.json"
 
 interface JobTitle {
   id: string
@@ -70,11 +57,39 @@ export function JobTitlesManager() {
   const [internalTitle, setInternalTitle] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
+  // Filtered list for performance (max 50 items visible at once)
+  // We initialize with a slice to avoid empty state flash
+  const [filteredOccupations, setFilteredOccupations] = React.useState<string[]>(nocData.slice(0, 50))
+  
+  // Need to track search query manually because standard Command filtering 
+  // on 10k items in React might be sluggish if we rendered them all.
+  // Instead, we'll filter the source array and only render the results.
+  const [searchQuery, setSearchQuery] = React.useState("")
+
+  React.useEffect(() => {
+    if (!searchQuery) {
+      setFilteredOccupations(nocData.slice(0, 50))
+      return
+    }
+
+    const lowerQuery = searchQuery.toLowerCase()
+    const matches = []
+    // Efficiently find first 50 matches
+    for (let i = 0; i < nocData.length; i++) {
+      if (nocData[i].toLowerCase().includes(lowerQuery)) {
+        matches.push(nocData[i])
+        if (matches.length >= 50) break
+      }
+    }
+    setFilteredOccupations(matches)
+  }, [searchQuery])
+
   const resetForm = () => {
     setStandardOccupation("")
     setInternalTitle("")
     setError(null)
     setEditingJob(null)
+    setSearchQuery("")
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -227,18 +242,24 @@ export function JobTitlesManager() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[450px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search occupation..." />
+                  <Command shouldFilter={false}>
+                    <CommandInput 
+                      placeholder="Search occupation..." 
+                      value={searchQuery}
+                      onValueChange={setSearchQuery}
+                    />
                     <CommandList>
                       <CommandEmpty>No occupation found.</CommandEmpty>
                       <CommandGroup>
-                        {nocOccupations.map((occupation) => (
+                        {filteredOccupations.map((occupation) => (
                           <CommandItem
                             key={occupation}
                             value={occupation}
                             onSelect={(currentValue) => {
-                              // Shadcn/cmdk might lowercase the value, so we find the original
-                              const original = nocOccupations.find(o => o.toLowerCase() === currentValue.toLowerCase())
+                              // Shadcn/cmdk might lowercase the value, so we use our source of truth
+                              // But since we are rendering exact strings from filteredOccupations, 
+                              // currentValue matches the occupation text (mostly) but normalized
+                              const original = filteredOccupations.find(o => o.toLowerCase() === currentValue.toLowerCase())
                               const newValue = original || currentValue
                               setStandardOccupation(newValue === standardOccupation ? "" : newValue)
                               setOpenCombobox(false)
@@ -288,4 +309,3 @@ export function JobTitlesManager() {
     </div>
   )
 }
-
