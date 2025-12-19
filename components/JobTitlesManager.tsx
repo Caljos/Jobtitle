@@ -38,11 +38,15 @@ import {
 } from "@/components/ui/popover"
 
 // Import generated NOC data
-import nocData from "./noc-data.json"
+import nocDataRaw from "./noc-data.json"
+
+// Type assertion for the imported JSON
+const nocData = nocDataRaw as { title: string; code: string }[]
 
 interface JobTitle {
   id: string
   standardOccupation: string
+  nocCode?: string
   internalTitle: string
 }
 
@@ -54,16 +58,13 @@ export function JobTitlesManager() {
   // Form State
   const [openCombobox, setOpenCombobox] = React.useState(false)
   const [standardOccupation, setStandardOccupation] = React.useState("")
+  const [selectedNocCode, setSelectedNocCode] = React.useState("")
   const [internalTitle, setInternalTitle] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
   // Filtered list for performance (max 50 items visible at once)
-  // We initialize with a slice to avoid empty state flash
-  const [filteredOccupations, setFilteredOccupations] = React.useState<string[]>(nocData.slice(0, 50))
+  const [filteredOccupations, setFilteredOccupations] = React.useState(nocData.slice(0, 50))
   
-  // Need to track search query manually because standard Command filtering 
-  // on 10k items in React might be sluggish if we rendered them all.
-  // Instead, we'll filter the source array and only render the results.
   const [searchQuery, setSearchQuery] = React.useState("")
 
   React.useEffect(() => {
@@ -76,7 +77,7 @@ export function JobTitlesManager() {
     const matches = []
     // Efficiently find first 50 matches
     for (let i = 0; i < nocData.length; i++) {
-      if (nocData[i].toLowerCase().includes(lowerQuery)) {
+      if (nocData[i].title.toLowerCase().includes(lowerQuery) || nocData[i].code.includes(lowerQuery)) {
         matches.push(nocData[i])
         if (matches.length >= 50) break
       }
@@ -86,6 +87,7 @@ export function JobTitlesManager() {
 
   const resetForm = () => {
     setStandardOccupation("")
+    setSelectedNocCode("")
     setInternalTitle("")
     setError(null)
     setEditingJob(null)
@@ -100,6 +102,11 @@ export function JobTitlesManager() {
   const handleEdit = (job: JobTitle) => {
     setEditingJob(job)
     setStandardOccupation(job.standardOccupation)
+    
+    // Find NOC code if missing (for legacy data)
+    const match = nocData.find(n => n.title === job.standardOccupation)
+    setSelectedNocCode(job.nocCode || match?.code || "")
+    
     setInternalTitle(job.internalTitle)
     setIsDialogOpen(true)
   }
@@ -119,7 +126,6 @@ export function JobTitlesManager() {
     }
 
     // Check for duplicates
-    // Standard Occupation + Internal Title must be unique
     const isDuplicate = jobs.some(job => 
       job.id !== editingJob?.id && // Ignore self if editing
       job.standardOccupation === standardOccupation &&
@@ -135,7 +141,7 @@ export function JobTitlesManager() {
       // Update
       setJobs(jobs.map(job => 
         job.id === editingJob.id 
-          ? { ...job, standardOccupation, internalTitle: internalTitle.trim() }
+          ? { ...job, standardOccupation, nocCode: selectedNocCode, internalTitle: internalTitle.trim() }
           : job
       ))
     } else {
@@ -145,6 +151,7 @@ export function JobTitlesManager() {
         {
           id: Math.random().toString(36).substring(2, 9),
           standardOccupation,
+          nocCode: selectedNocCode,
           internalTitle: internalTitle.trim()
         }
       ])
@@ -194,7 +201,14 @@ export function JobTitlesManager() {
                       <span className="font-medium">{job.standardOccupation}</span>
                     )}
                   </TableCell>
-                  <TableCell>{job.standardOccupation}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>{job.standardOccupation}</span>
+                      {job.nocCode && (
+                        <span className="text-xs text-muted-foreground">NOC {job.nocCode}</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(job)}>
@@ -233,18 +247,27 @@ export function JobTitlesManager() {
                     variant="outline"
                     role="combobox"
                     aria-expanded={openCombobox}
-                    className="justify-between w-full font-normal"
+                    className="justify-between w-full font-normal overflow-hidden"
                   >
-                    {standardOccupation
-                      ? standardOccupation
-                      : "Select occupation..."}
+                    {standardOccupation ? (
+                      <div className="flex items-center truncate">
+                        <span className="truncate">{standardOccupation}</span>
+                        {selectedNocCode && (
+                          <span className="ml-2 text-xs text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded">
+                            {selectedNocCode}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      "Select occupation..."
+                    )}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[450px] p-0" align="start">
                   <Command shouldFilter={false}>
                     <CommandInput 
-                      placeholder="Search occupation..." 
+                      placeholder="Search occupation or code..." 
                       value={searchQuery}
                       onValueChange={setSearchQuery}
                     />
@@ -253,25 +276,24 @@ export function JobTitlesManager() {
                       <CommandGroup>
                         {filteredOccupations.map((occupation) => (
                           <CommandItem
-                            key={occupation}
-                            value={occupation}
-                            onSelect={(currentValue) => {
-                              // Shadcn/cmdk might lowercase the value, so we use our source of truth
-                              // But since we are rendering exact strings from filteredOccupations, 
-                              // currentValue matches the occupation text (mostly) but normalized
-                              const original = filteredOccupations.find(o => o.toLowerCase() === currentValue.toLowerCase())
-                              const newValue = original || currentValue
-                              setStandardOccupation(newValue === standardOccupation ? "" : newValue)
+                            key={`${occupation.code}-${occupation.title}`}
+                            value={occupation.title}
+                            onSelect={() => {
+                              setStandardOccupation(occupation.title)
+                              setSelectedNocCode(occupation.code)
                               setOpenCombobox(false)
                             }}
                           >
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                standardOccupation === occupation ? "opacity-100" : "opacity-0"
+                                standardOccupation === occupation.title ? "opacity-100" : "opacity-0"
                               )}
                             />
-                            {occupation}
+                            <div className="flex flex-col">
+                              <span>{occupation.title}</span>
+                              <span className="text-xs text-muted-foreground">NOC {occupation.code}</span>
+                            </div>
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -279,6 +301,11 @@ export function JobTitlesManager() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              {selectedNocCode && (
+                 <p className="text-[0.8rem] text-muted-foreground mt-1">
+                   Associated NOC Code: <span className="font-mono font-medium">{selectedNocCode}</span>
+                 </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="internal-title">Internal Title</Label>
