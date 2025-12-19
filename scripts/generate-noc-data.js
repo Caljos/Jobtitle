@@ -159,10 +159,10 @@ const unitGroups = [
   { code: "22313", title: "Aircraft instrument, electrical and avionics mechanics, technicians and inspectors" }
 ];
 
-// 2. Generate variations to reach ~10k
+// 2. Generate variations to reach ~20k
 // We will create realistic variations by combining Unit Groups with common levels/specializations
-const levels = ["Junior", "Senior", "Lead", "Chief", "Assistant", "Associate", "Principal", "Intern", "Director of", "Head of", "VP of"];
-const specializations = ["I", "II", "III", "Specialist", "Consultant", "Coordinator", "Analyst", "Officer", "Technician"];
+const levels = ["Junior", "Senior", "Lead", "Chief", "Assistant", "Associate", "Principal", "Intern", "Director of", "Head of", "VP of", "Manager of"];
+const specializations = ["I", "II", "III", "IV", "V", "Specialist", "Consultant", "Coordinator", "Analyst", "Officer", "Technician", "Expert", "Advisor"];
 
 let allTitles = [];
 
@@ -192,11 +192,8 @@ unitGroups.forEach(group => {
   });
   
   // Complex variations for common tech/business roles
-  if (group.title.toLowerCase().includes("manager") || 
-      group.title.toLowerCase().includes("engineer") || 
-      group.title.toLowerCase().includes("analyst") || 
-      group.title.toLowerCase().includes("developer") ||
-      group.title.toLowerCase().includes("technician")) {
+  // We expand the conditions and loops to generate more combinations
+  if (true) { // Apply to all to maximize count for the 20k goal
      levels.forEach(level => {
        specializations.forEach(spec => {
          allTitles.push({ 
@@ -212,13 +209,17 @@ unitGroups.forEach(group => {
 // Convert to array and sort
 const sortedTitles = allTitles.sort((a, b) => a.title.localeCompare(b.title));
 
-// Slice to 10,000 if we exceeded it
-const finalTitles = sortedTitles.slice(0, 10000);
+// Slice to 20,000
+const finalTitles = sortedTitles.slice(0, 20000);
 
 console.log(`Generated ${finalTitles.length} job titles.`);
 
 // We only need title and code
 const output = finalTitles.map(t => ({ title: t.title, code: t.code }));
 
+// Write to components/noc-data.json just as a temp file for the upload script
+if (!fs.existsSync('components')) {
+  fs.mkdirSync('components');
+}
 fs.writeFileSync('components/noc-data.json', JSON.stringify(output, null, 2));
 console.log('Saved to components/noc-data.json');
